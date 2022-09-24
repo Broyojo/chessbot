@@ -1,11 +1,3 @@
-"""
-Usage:
-
-python3 run.py --train --test_size 0.1 --dataset ./data/ --output ./models/model
-
-"""
-
-
 import os
 import random
 import sys
@@ -13,12 +5,13 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from args import config_args
 from datasets import load_dataset
 from tokenizers import ByteLevelBPETokenizer
 from transformers import (DataCollatorForLanguageModeling, GPT2Config,
                           GPT2LMHeadModel, GPT2TokenizerFast, Trainer,
                           TrainingArguments)
+
+from args import config_args
 
 
 @config_args
@@ -39,10 +32,9 @@ class Config:
     eval_batch_size: int = 8                # number of batches at a time during eval
     # number of runs through the data during training
     epochs: int = 1
-    save_steps: int = 1000                  # number of steps between saving the model
+    save_steps: int = 5000                  # number of steps between saving the model
     eval_steps: int = 5000                  # number of steps between evaluation
     num_samples: int = 20                   # number of output samples
-
 
 def main(config: Config):
     print("\nStarting in 5 seconds...")
@@ -54,22 +46,23 @@ def main(config: Config):
             print(f"Error: {config.dataset} does not exist. Quitting.")
             sys.exit(1)
 
-        tokenizer = ByteLevelBPETokenizer()
+        if config.tokenizer == "":
+            tokenizer = ByteLevelBPETokenizer()
 
-        tokenizer.train(files=data_files, vocab_size=52_000, min_frequency=1, special_tokens=[
-            "<s>",    # start of sequence
-            "<pad>",  # pad sequence to correct length
-            "</s>",   # end of sequence
-            "<unk>",  # unknown token
-            "<mask>",  # token to tell the model where to fill in
-        ])
+            tokenizer.train(files=data_files, vocab_size=52_000, min_frequency=1, special_tokens=[
+                "<s>",    # start of sequence
+                "<pad>",  # pad sequence to correct length
+                "</s>",   # end of sequence
+                "<unk>",  # unknown token
+                "<mask>",  # token to tell the model where to fill in
+            ])
 
-        if not os.path.exists(config.tokenizer):
-            os.mkdir(config.tokenizer)
+            if not os.path.exists(config.tokenizer):
+                os.mkdir(config.tokenizer)
 
-        tokenizer.save_model(config.tokenizer)
+            tokenizer.save_model(config.tokenizer)
 
-        dataset = load_dataset("text", data_files=data_files, split="train").shuffle(time.time())
+        dataset = load_dataset("text", data_files=data_files, split="train").shuffle(time.time_ns())
 
         tokenizer = GPT2TokenizerFast.from_pretrained(config.tokenizer)
         tokenizer.add_special_tokens({
@@ -166,7 +159,7 @@ def main(config: Config):
         print(f"Generating {num_samples} samples...")
 
         for sample in range(num_samples):
-            inp = f"gender {'M' if random.random() < 0.5 else 'F'} born {random.randint(1904, 2022)} claim diagnoses"
+            inp = f"<s>"
             input_ids = tokenizer.encode(inp, return_tensors="pt").cuda()
 
             output = model.generate(

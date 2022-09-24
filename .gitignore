@@ -1,1 +1,7 @@
 /.vscode
+data/*
+raw_data/*
+models/*
+output/*
+__pycache__/*
+tokenizer/*
