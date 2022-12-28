@@ -1,13 +1,10 @@
 import argparse
-from calendar import c
-from dataclasses import dataclass
-
-from typing_extensions import Self
 
 
 def config_args(config):
     config.parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
     values = config.__dict__
 

@@ -1,40 +1,45 @@
 import os
-import random
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
 from datasets import load_dataset
 from tokenizers import ByteLevelBPETokenizer
-from transformers import (DataCollatorForLanguageModeling, GPT2Config,
-                          GPT2LMHeadModel, GPT2TokenizerFast, Trainer,
-                          TrainingArguments)
+from transformers import (
+    DataCollatorForLanguageModeling,
+    GPT2Config,
+    GPT2LMHeadModel,
+    GPT2TokenizerFast,
+    Trainer,
+    TrainingArguments,
+)
 
 from args import config_args
 
 
 @config_args
 class Config:
-    train: bool = False                     # train the model
-    eval: bool = False                      # evaluate the model
-    dataset: str = "./data/"                # directory that the dataset is located at
+    train: bool = False  # train the model
+    eval: bool = False  # evaluate the model
+    dataset: str = "./data/"  # directory that the dataset is located at
     # fraction of the train dataset split for testing
     test_size: float = 0.1
-    model: str = "./models/model/"          # directory where the model file is stored
-    tokenizer: str = "./tokenizer/"         # directory where the tokenizer is stored
-    output: str = "./output/output.txt"     # output path for evaluation
-    context_length: int = 1024              # size of the context window
+    model: str = "./models/model/"  # directory where the model file is stored
+    tokenizer: str = "./tokenizer/"  # directory where the tokenizer is stored
+    output: str = "./output/output.txt"  # output path for evaluation
+    context_length: int = 1024  # size of the context window
     # directory where the pretrained model file is stored
     from_pretrained: str
     # number of batches at a time during training
     train_batch_size: int = 2
-    eval_batch_size: int = 8                # number of batches at a time during eval
+    eval_batch_size: int = 8  # number of batches at a time during eval
     # number of runs through the data during training
     epochs: int = 1
-    save_steps: int = 5000                  # number of steps between saving the model
-    eval_steps: int = 5000                  # number of steps between evaluation
-    num_samples: int = 20                   # number of output samples
+    save_steps: int = 5000  # number of steps between saving the model
+    eval_steps: int = 5000  # number of steps between evaluation
+    num_samples: int = 20  # number of output samples
+    prompt: str = ""
+
 
 def main(config: Config):
     print("\nStarting in 5 seconds...")
@@ -49,29 +54,38 @@ def main(config: Config):
         if config.tokenizer == "":
             tokenizer = ByteLevelBPETokenizer()
 
-            tokenizer.train(files=data_files, vocab_size=52_000, min_frequency=1, special_tokens=[
-                "<s>",    # start of sequence
-                "<pad>",  # pad sequence to correct length
-                "</s>",   # end of sequence
-                "<unk>",  # unknown token
-                "<mask>",  # token to tell the model where to fill in
-            ])
+            tokenizer.train(
+                files=data_files,
+                vocab_size=52_000,
+                min_frequency=1,
+                special_tokens=[
+                    "<s>",  # start of sequence
+                    "<pad>",  # pad sequence to correct length
+                    "</s>",  # end of sequence
+                    "<unk>",  # unknown token
+                    "<mask>",  # token to tell the model where to fill in
+                ],
+            )
 
             if not os.path.exists(config.tokenizer):
                 os.mkdir(config.tokenizer)
 
             tokenizer.save_model(config.tokenizer)
 
-        dataset = load_dataset("text", data_files=data_files, split="train").shuffle(time.time_ns())
+        dataset = load_dataset("text", data_files=data_files, split="train").shuffle(
+            time.time_ns()
+        )
 
         tokenizer = GPT2TokenizerFast.from_pretrained(config.tokenizer)
-        tokenizer.add_special_tokens({
-            "bos_token": "<s>",
-            "pad_token": "<pad>",
-            "eos_token": "</s>",
-            "unk_token": "<unk>",
-            "mask_token": "<mask>",
-        })
+        tokenizer.add_special_tokens(
+            {
+                "bos_token": "<s>",
+                "pad_token": "<pad>",
+                "eos_token": "</s>",
+                "unk_token": "<unk>",
+                "mask_token": "<mask>",
+            }
+        )
 
         def encode(element):
             outputs = tokenizer(
@@ -84,9 +98,11 @@ def main(config: Config):
             return {"input_ids": outputs["input_ids"]}
 
         dataset = dataset.map(
-            lambda x: {"text": "<s>" + x["text"] + "</s>"}, num_proc=os.cpu_count())
-        dataset = dataset.map(encode, batched=True, remove_columns=[
-            "text"], num_proc=os.cpu_count())
+            lambda x: {"text": "<s>" + x["text"] + "</s>"}, num_proc=os.cpu_count()
+        )
+        dataset = dataset.map(
+            encode, batched=True, remove_columns=["text"], num_proc=os.cpu_count()
+        )
         dataset = dataset.train_test_split(test_size=config.test_size)
 
         data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
@@ -114,17 +130,14 @@ def main(config: Config):
             logging_strategy="steps",
             logging_steps=50,
             num_train_epochs=config.epochs,
-
             # adjust these depending on how much vram you have
             per_device_train_batch_size=config.train_batch_size,
             per_device_eval_batch_size=config.eval_batch_size,
             fp16=True,
-
             save_steps=config.save_steps,
             save_total_limit=5,
             prediction_loss_only=False,
             remove_unused_columns=False,
-
             evaluation_strategy="steps",
             eval_steps=config.eval_steps,
         )
@@ -142,13 +155,15 @@ def main(config: Config):
 
     if config.eval:
         tokenizer = GPT2TokenizerFast.from_pretrained(config.tokenizer)
-        tokenizer.add_special_tokens({
-            "bos_token": "<s>",
-            "pad_token": "<pad>",
-            "eos_token": "</s>",
-            "unk_token": "<unk>",
-            "mask_token": "<mask>",
-        })
+        tokenizer.add_special_tokens(
+            {
+                "bos_token": "<s>",
+                "pad_token": "<pad>",
+                "eos_token": "</s>",
+                "unk_token": "<unk>",
+                "mask_token": "<mask>",
+            }
+        )
 
         model = GPT2LMHeadModel.from_pretrained(config.model).cuda()
 
@@ -159,7 +174,7 @@ def main(config: Config):
         print(f"Generating {num_samples} samples...")
 
         for sample in range(num_samples):
-            inp = f"<s>"
+            inp = f"<s>{config.prompt}"
             input_ids = tokenizer.encode(inp, return_tensors="pt").cuda()
 
             output = model.generate(
@@ -171,7 +186,6 @@ def main(config: Config):
                 # top_p=1,
                 do_sample=True,
                 # repetition_penalty=1.1,
-
                 bos_token_id=tokenizer.bos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.pad_token_id,
